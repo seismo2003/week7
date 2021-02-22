@@ -1,36 +1,104 @@
-window.addEventListener('DOMContentLoaded', async function(event) {
-  let db = firebase.firestore()
-  let apiKey = 'your TMDB API key'
-  let response = await fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&language=en-US`)
-  let json = await response.json()
-  let movies = json.results
-  console.log(movies)
-  
-  for (let i=0; i<movies.length; i++) {
-    let movie = movies[i]
-    let docRef = await db.collection('watched').doc(`${movie.id}`).get()
-    let watchedMovie = docRef.data()
-    let opacityClass = ''
-    if (watchedMovie) {
-      opacityClass = 'opacity-20'
-    }
+firebase.auth().onAuthStateChanged(async function(user) {
+  if (user) {    
 
-    document.querySelector('.movies').insertAdjacentHTML('beforeend', `
-      <div class="w-1/5 p-4 movie-${movie.id} ${opacityClass}">
-        <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" class="w-full">
-        <a href="#" class="watched-button block text-center text-white bg-green-500 mt-4 px-4 py-2 rounded">I've watched this!</a>
-      </div>
-    `)
-
-    document.querySelector(`.movie-${movie.id}`).addEventListener('click', async function(event) {
-      event.preventDefault()
-      let movieElement = document.querySelector(`.movie-${movie.id}`)
-      movieElement.classList.add('opacity-20')
-      await db.collection('watched').doc(`${movie.id}`).set({})
+    let db = firebase.firestore()
+    db.collection('users').doc(user.uid).set({
+      name: user.displayName,
+      email: user.email
     }) 
-  }
-})
+        
+        let apiKey = '58f8dcdd4a07aa1b6258c89a62e15ad2'
+        let response = await fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&language=en-US`)
+        let json = await response.json()
+        let movies = json.results
+        let querySnapshot = await db.collection('watched').where('userId', '==', user.uid).get()
+        let watched_list = querySnapshot.docs
 
+
+        for (let i=0; i<movies.length; i++) {
+          let user_id = user.uid
+          let user_name = user_id.name
+          let movie = movies[i]
+        //  let docRef = await db.collection('watched').doc(`${movie.id}`).get()
+        //  let watchedMovie = docRef.data()
+          let opacityClass = ''
+          
+          for (j=0; j < watched_list.length; j++) {
+            if (watched_list[j].data().movieId == movie.id) { 
+              opacityClass = 'opacity-20'
+              break;
+            }  
+            
+          }
+
+          document.querySelector('.movies').insertAdjacentHTML('beforeend', `
+            <div class="w-1/5 p-4 movie-${movie.id} ${opacityClass}">
+              <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" class="w-full">
+              <a href="#" class="watched-button block text-center text-white bg-green-500 mt-4 px-4 py-2 rounded">I've watched this!</a>
+            </div>
+          `)
+
+          document.querySelector(`.movie-${movie.id}`).addEventListener('click', async function(event) {
+            event.preventDefault()
+           // let movieElement = document.querySelector(`.movie-${movie.id}`)
+           // movieElement.classList.add('opacity-20')
+            let docRef = watched_list.data()
+                      
+            if (!docRef.exists) {
+            //  document.querySelector(`.movie-${movie.id}`).classList.add('opacity-20')
+              await db.collection('watched').add({
+                title: movie.title,
+                movieId: movie.id,
+                userId: user_id
+              })
+              console.log(`new watched movie with ID ${movie.id} created`)
+            } else {
+              
+              document.querySelector(`.movie-${movie.id}`).classList.remove('opacity-20')
+              await db.collection('watched').doc(`${movie.id}`).delete()
+              console.log(`watched movie with ID ${movie.id} removed`)
+            
+            }
+          }
+          )
+            
+        }
+    
+
+        
+      
+
+      document.querySelector('.sign-in-or-sign-out').innerHTML = `
+      <div>
+        <p class="text-white font-bold py-3 text-5xl font-monos">${user.displayName}'s movie list</p>
+      </div>
+      <br>
+      <button class="bg-blue-400 hover:bg-blue-dark text-white font-bold py-2 px-4 rounded sign-out">Sign Out</button>
+      `
+
+      document.querySelector('.sign-out').addEventListener('click', function(event) {
+        console.log('sign out clicked')
+        firebase.auth().signOut()
+        document.location.href = 'movies.html'
+      })
+
+
+    } else {
+      let ui = new firebaseui.auth.AuthUI(firebase.auth())
+      let authUIConfig = {
+        signInOptions: [
+          firebase.auth.EmailAuthProvider.PROVIDER_ID
+        ],
+        signInSuccessUrl: 'movies.html'
+      }
+  
+      // Starts FirebaseUI Auth
+      ui.start('.sign-in-or-sign-out', authUIConfig);
+
+    }
+  }
+
+)
 // Goal:   Refactor the movies application from last week, so that it supports
 //         user login and each user can have their own watchlist.
 
